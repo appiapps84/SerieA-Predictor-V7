@@ -297,6 +297,8 @@ function calculateExpectedGoals(body, config) {
 
   sources.push({ key: "base", home: 1.35, away: 1.05 });
 
+   console.log("SOURCES_DEBUG", JSON.stringify(sources.map(s => ({ key: s.key, home: s.home, away: s.away }))));
+   
   let totalW = 0, homeXG = 0, awayXG = 0;
   for (const s of sources) {
     const w = config.weights[s.key] ?? 0.2;
@@ -306,6 +308,16 @@ function calculateExpectedGoals(body, config) {
   }
   homeXG /= totalW;
   awayXG /= totalW;
+
+   console.log("MIX_DEBUG", JSON.stringify({
+  homeXG_afterMix: homeXG,
+  awayXG_afterMix: awayXG,
+  homeStanding,
+  awayStanding,
+  homeForm_avg: homeForm?.averageGoalsFor,
+  homeForm_avgAgainst: homeForm?.averageGoalsAgainst,
+  homeForm_last5: homeForm?.last5
+}));
 
   const h2hMatches = getH2HMatches(body.h2h, homeTeam, awayTeam);
   const threeYearsAgo = Date.now() - 3 * 365 * 86400000;
