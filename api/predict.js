@@ -133,10 +133,21 @@ function getStandingRow(standings, teamName) {
 
 function getStandingStats(row) {
   if (!row) return null;
-  const games = num(row.games_played ?? row.played ?? row.games ?? row.matches_played);
-  const gf = num(row.goals_for ?? row.gf ?? row.scored);
-  const ga = num(row.goals_against ?? row.ga ?? row.conceded);
+
+  const games = num(
+    row.games_played ?? row.played ?? row.games ?? row.matches_played
+  );
+  const gf = num(
+    row.goals_for ?? row.gf ?? row.scored ??
+    row.points_for ?? row.pointsFor          // ← BBS usa questo
+  );
+  const ga = num(
+    row.goals_against ?? row.ga ?? row.conceded ??
+    row.points_against ?? row.pointsAgainst  // ← BBS usa questo
+  );
+
   if (games === null || games <= 0 || gf === null || ga === null) return null;
+
   return {
     goalsForPerGame: gf / games,
     goalsAgainstPerGame: ga / games,
