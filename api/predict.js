@@ -21,10 +21,10 @@ const LEAGUE_AWAY_XG = 1.15;
 const LEAGUE_AVG_XG = 1.30;
 
 const DEFAULT_WEIGHTS = {
-  understat: 0.40,
-  standings: 0.20,
-  form: 0.20,
-  base: 0.20
+  understat: 1.00,
+  standings: 0.00,
+  form: 0.00,
+  base: 0.00
 };
 
 const DEFAULT_DECAY_HALF_LIFE_DAYS = 90;
