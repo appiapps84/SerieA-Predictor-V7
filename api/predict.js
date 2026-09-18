@@ -204,7 +204,6 @@ function lambdaFromUnderstat(homeU, awayU) {
   if (homeU.xgForPerGame == null || awayU.xgForPerGame == null) return null;
 
   const K = 5;
-
   const shrink = (observed, played) => {
     const games = Math.max(1, played || 1);
     const w = games / (games + K);
@@ -219,6 +218,17 @@ function lambdaFromUnderstat(homeU, awayU) {
   const awayXgFor = shrink(awayU.xgForPerGame, awayPlayed);
   const awayXgAgainst = shrink(awayU.xgAgainstPerGame ?? LEAGUE_AVG_XG, awayPlayed);
 
+  // DEBUG TEMPORANEO
+  console.log("UNDERSTAT DEBUG", {
+    homePlayed, awayPlayed, K,
+    homeRaw: homeU.xgForPerGame,
+    homeShrunk: homeXgFor,
+    awayRaw: awayU.xgForPerGame,
+    awayShrunk: awayXgFor,
+    homeAgainst: homeXgAgainst,
+    awayAgainst: awayXgAgainst
+  });
+
   const homeAttack = homeXgFor / LEAGUE_AVG_XG;
   const awayDefense = awayXgAgainst / LEAGUE_AVG_XG;
   const awayAttack = awayXgFor / LEAGUE_AVG_XG;
@@ -229,7 +239,6 @@ function lambdaFromUnderstat(homeU, awayU) {
     away: LEAGUE_AWAY_XG * awayAttack * homeDefense
   };
 }
-
 function lambdaFromForm(homeForm, awayForm) {
   if (!homeForm || !awayForm) return null;
 
