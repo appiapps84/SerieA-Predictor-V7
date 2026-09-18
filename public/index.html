@@ -370,11 +370,75 @@ function extractTeamName(match, side) {
   return String(v || "").trim();
 }
 
+const TEAM_NOISE = /\b(fc|ac|as|ss|ssc|usc|cfc|calcio|1907|1899|1909|1913|1920|1926|1928|1929)\b/g;
+
+const TEAM_ALIASES = {
+  "inter milan": "inter",
+  "internazionale": "inter",
+  "inter": "inter",
+  "ac milan": "milan",
+  "milan": "milan",
+  "as roma": "roma",
+  "roma": "roma",
+  "como 1907": "como",
+  "como": "como",
+  "venezia fc": "venezia",
+  "venezia": "venezia",
+  "hellas verona": "verona",
+  "verona": "verona",
+  "juventus": "juventus",
+  "juve": "juventus",
+  "napoli": "napoli",
+  "ssc napoli": "napoli",
+  "lazio": "lazio",
+  "ss lazio": "lazio",
+  "fiorentina": "fiorentina",
+  "acf fiorentina": "fiorentina",
+  "atalanta": "atalanta",
+  "atalanta bc": "atalanta",
+  "torino": "torino",
+  "bologna": "bologna",
+  "udinese": "udinese",
+  "genoa": "genoa",
+  "genoa cfc": "genoa",
+  "cagliari": "cagliari",
+  "empoli": "empoli",
+  "lecce": "lecce",
+  "parma": "parma",
+  "parma calcio": "parma",
+  "monza": "monza",
+  "salernitana": "salernitana",
+  "sassuolo": "sassuolo",
+  "frosinone": "frosinone",
+  "cremonese": "cremonese",
+  "pisa": "pisa",
+  "chievo": "chievo",
+  "chievo verona": "chievo",
+  "sampdoria": "sampdoria",
+  "spezia": "spezia",
+  "benevento": "benevento",
+  "brescia": "brescia",
+  "crotone": "crotone"
+};
+
 function normalizeTeamName(v) {
   if (typeof v === "object" && v !== null) {
-    v = v.name || v.title || "";
+    v = v.name || v.team_name || v.teamName || v.title || "";
   }
-  return String(v || "").trim().toLowerCase();
+
+  let s = String(v || "").toLowerCase().trim();
+  s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  s = s.replace(/[^a-z0-9\s]/g, " ");
+  s = s.replace(TEAM_NOISE, " ");
+  s = s.replace(/\s+/g, " ").trim();
+
+  if (TEAM_ALIASES[s]) return TEAM_ALIASES[s];
+
+  for (const [alias, canonical] of Object.entries(TEAM_ALIASES)) {
+    if (s.includes(alias) && alias.length >= 4) return canonical;
+  }
+
+  return s;
 }
 
 function getAvailableTeams(matches) {
