@@ -1,9 +1,9 @@
 /* =========================================================
-   api/predict.js — V7 (Fix 1+2+3)
-   Modello: Poisson + Dixon-Coles multi-fattore.
+   api/predict.js — V7 stabile
+   Poisson + Dixon-Coles multi-fattore.
    Fattori: Understat xG (0.40) + Classifica (0.20) + Forma (0.20) + Base (0.20).
-   Fix 1: regressione verso la media (Bayesian shrinkage) in lambdaFromUnderstat.
-   Fix 2: H2H soglia 1 + peso proporzionale al numero di match.
+   Fix 1: regressione verso la media (Bayesian shrinkage).
+   Fix 2: H2H soglia 1 + peso proporzionale.
    Fix 3: dataQuality nel response.
 ========================================================= */
 
@@ -126,7 +126,6 @@ function getStandingRow(standings, teamName) {
 function getStandingStats(row) {
   if (!row) return null;
 
-  // BBS usa points_for / points_against per i GOL (non punti classifica)
   const games = num(
     row.games_played ?? row.played ?? row.games ?? row.matches_played
   );
@@ -153,7 +152,7 @@ function getUnderstatEntry(understat, teamName) {
   const wanted = normalizeTeamName(teamName);
   if (!wanted) return null;
   if (understat[wanted]) return understat[wanted];
-  for (const [k, v] of Object.entries(understat)) {
+  for (const [, v] of Object.entries(understat)) {
     if (normalizeTeamName(v?.team) === wanted) return v;
   }
   return null;
@@ -195,10 +194,6 @@ function lambdaFromStandings(homeStats, awayStats) {
   };
 }
 
-/**
- * FIX 1: regressione verso la media (Bayesian shrinkage).
- * Con poche partite, "tira" verso LEAGUE_AVG_XG; con molte, si fida dei dati.
- */
 function lambdaFromUnderstat(homeU, awayU) {
   if (!homeU || !awayU) return null;
   if (homeU.xgForPerGame == null || awayU.xgForPerGame == null) return null;
@@ -226,22 +221,12 @@ function lambdaFromUnderstat(homeU, awayU) {
   const lambdaHome = LEAGUE_HOME_XG * homeAttack * awayDefense;
   const lambdaAway = LEAGUE_AWAY_XG * awayAttack * homeDefense;
 
-  console.log("UNDERSTAT_DEBUG", JSON.stringify({
-    homePlayed,
-    awayPlayed,
-    homeRaw: homeU.xgForPerGame,
-    homeShrunk: homeXgFor,
-    awayRaw: awayU.xgForPerGame,
-    awayShrunk: awayXgFor,
-    lambdaHome,
-    lambdaAway
-  }));
-
   return {
     home: lambdaHome,
     away: lambdaAway
   };
 }
+
 function lambdaFromForm(homeForm, awayForm) {
   if (!homeForm || !awayForm) return null;
 
@@ -313,7 +298,6 @@ function calculateExpectedGoals(body, config) {
   homeXG /= totalW;
   awayXG /= totalW;
 
-  // ---- FIX 2: H2H soglia 1 + peso proporzionale ----
   const h2hMatches = getH2HMatches(body.h2h, homeTeam, awayTeam);
   const threeYearsAgo = Date.now() - 3 * 365 * 86400000;
   const recentH2H = h2hMatches.filter((m) => {
@@ -341,11 +325,11 @@ function calculateExpectedGoals(body, config) {
     if (cnt >= 1) {
       const avgH = hg / cnt;
       const avgA = ag / cnt;
-
-      // Con 1 match l'aggiustamento è ±2.5%, con 2+ è ±5%
       const h2hWeight = Math.min(1, cnt / 2);
+
       homeXG *= clamp(0.95 + (avgH / 1.45) * 0.05 * h2hWeight, 0.95, 1.05);
       awayXG *= clamp(0.95 + (avgA / 1.15) * 0.05 * h2hWeight, 0.95, 1.05);
+
       factors.h2h = true;
       h2hInfo = {
         available: true, matches: cnt,
@@ -524,7 +508,6 @@ async function trackPrediction(body, expected, probabilities, config) {
 
   const matchId = body?.match?.id;
 
-  // Skip se manca UUID valido
   if (!matchId || typeof matchId !== "string" || !matchId.includes("-")) {
     console.warn("trackPrediction: match_id non valido, salto il salvataggio");
     return;
@@ -621,7 +604,6 @@ export default async function handler(req, res) {
       ]);
     } catch {}
 
-    // --- FIX 3: dataQuality ---
     const homeData = getUnderstatEntry(body.understat, homeTeam);
     const awayData = getUnderstatEntry(body.understat, awayTeam);
 
