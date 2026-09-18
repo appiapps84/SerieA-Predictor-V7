@@ -682,4 +682,36 @@ async function runBacktest() {
     ];
     if (content) content.innerHTML = rows.join("");
   } catch (e) {
+    if (content) content.textContent = `Errore: ${e?.message || e}`;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+/* ================= EVENTS ================= */
+function setupEvents() {
+  $("syncButton")?.addEventListener("click", syncData);
+  $("predictButton")?.addEventListener("click", predict);
+  $("backtestButton")?.addEventListener("click", runBacktest);
+  $("homeTeam")?.addEventListener("change", () => { hideResults(); hideError(); });
+  $("awayTeam")?.addEventListener("change", () => { hideResults(); hideError(); });
+}
+
+/* ================= INIT ================= */
+function init() {
+  try {
+    setupEvents();
+    populateTeams();
+    setStatus("Sync automatico in corso...", "loading");
+    syncData();
+  } catch (e) {
+    console.error("INIT ERROR:", e);
+    showError(`Init: ${e?.message || e}`);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
    
