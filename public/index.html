@@ -490,10 +490,22 @@ function populateTeams() {
 function findMatch(homeTeam, awayTeam) {
   const h = normalizeTeamName(homeTeam);
   const a = normalizeTeamName(awayTeam);
-  return state.matches.find((m) => {
-    return normalizeTeamName(extractTeamName(m, "home")) === h &&
-           normalizeTeamName(extractTeamName(m, "away")) === a;
-  }) || null;
+  
+  // 1. Cerca nelle partite correnti
+  const current = state.matches.find((m) =>
+    normalizeTeamName(extractTeamName(m, "home")) === h &&
+    normalizeTeamName(extractTeamName(m, "away")) === a
+  );
+  if (current) return current;
+  
+  // 2. Fallback: cerca nello storico (storedMatches)
+  const stored = (state.syncData?.storedMatches || []).find((m) =>
+    normalizeTeamName(extractTeamName(m, "home")) === h &&
+    normalizeTeamName(extractTeamName(m, "away")) === a
+  );
+  if (stored) return stored;
+  
+  return null;
 }
 
 function getUnderstatFor(teamName) {
