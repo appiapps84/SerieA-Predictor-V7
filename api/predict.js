@@ -297,7 +297,9 @@ function calculateExpectedGoals(body, config) {
 
   sources.push({ key: "base", home: 1.35, away: 1.05 });
 
-   console.log("SOURCES_DEBUG", JSON.stringify(sources.map(s => ({ key: s.key, home: s.home, away: s.away }))));
+  sources.forEach(s => {
+  console.log("SOURCE_" + s.key + " home=" + s.home + " away=" + s.away);
+});
    
   let totalW = 0, homeXG = 0, awayXG = 0;
   for (const s of sources) {
@@ -309,7 +311,7 @@ function calculateExpectedGoals(body, config) {
   homeXG /= totalW;
   awayXG /= totalW;
 
-   console.log("MIX_DEBUG", JSON.stringify({
+  console.log("MIX_RESULT home=" + homeXG + " away=" + awayXG + " totalW=" + totalW);
   homeXG_afterMix: homeXG,
   awayXG_afterMix: awayXG,
   homeStanding,
