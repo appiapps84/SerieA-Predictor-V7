@@ -579,7 +579,7 @@ async function parseBody(req) {
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
-
+  console.log("SENTINELLA_V7 " + new Date().toISOString() + " handler attivo");
   if (req.method !== "POST") {
     return res.status(405).json({ ok: false, error: "METHOD_NOT_ALLOWED" });
   }
