@@ -214,9 +214,7 @@ function lambdaFromUnderstat(homeU, awayU) {
   if (homeU.xgForPerGame == null || awayU.xgForPerGame == null) return null;
 
   // Regressione verso la media lega (Bayesian shrinkage)
-  // Con poche partite, "tira" verso LEAGUE_AVG_XG; con molte, si fida dei dati
   const K = 5;
-
   const shrink = (observed, played) => {
     const games = Math.max(1, played || 1);
     const w = games / (games + K);
