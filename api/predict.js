@@ -22,7 +22,36 @@ const LEAGUE_AVG_XG = 1.30;
 // Pesi di default (se model_config non risponde)
 const DEFAULT_WEIGHTS = {
   understat: 0.40,
-  standings: 0.20,
+  standings: 0.20,function lambdaFromUnderstat(homeU, awayU) {
+  if (!homeU || !awayU) return null;
+  if (homeU.xgForPerGame == null || awayU.xgForPerGame == null) return null;
+
+  // Regressione verso la media lega (Bayesian shrinkage)
+  const K = 5;
+  const shrink = (observed, played) => {
+    const games = Math.max(1, played || 1);
+    const w = games / (games + K);
+    return w * observed + (1 - w) * LEAGUE_AVG_XG;
+  };
+
+  const homePlayed = homeU.matchesWithXg ?? homeU.played ?? 1;
+  const awayPlayed = awayU.matchesWithXg ?? awayU.played ?? 1;
+
+  const homeXgFor = shrink(homeU.xgForPerGame, homePlayed);
+  const homeXgAgainst = shrink(homeU.xgAgainstPerGame ?? LEAGUE_AVG_XG, homePlayed);
+  const awayXgFor = shrink(awayU.xgForPerGame, awayPlayed);
+  const awayXgAgainst = shrink(awayU.xgAgainstPerGame ?? LEAGUE_AVG_XG, awayPlayed);
+
+  const homeAttack = homeXgFor / LEAGUE_AVG_XG;
+  const awayDefense = awayXgAgainst / LEAGUE_AVG_XG;
+  const awayAttack = awayXgFor / LEAGUE_AVG_XG;
+  const homeDefense = homeXgAgainst / LEAGUE_AVG_XG;
+
+  return {
+    home: LEAGUE_HOME_XG * homeAttack * awayDefense,
+    away: LEAGUE_AWAY_XG * awayAttack * homeDefense
+  };
+}
   form: 0.20,
   base: 0.20
 };
