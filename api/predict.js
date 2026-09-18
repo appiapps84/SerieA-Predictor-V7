@@ -1,8 +1,10 @@
 /* =========================================================
-   api/predict.js — V7
+   api/predict.js — V7 (Fix 1+2+3)
    Modello: Poisson + Dixon-Coles multi-fattore.
    Fattori: Understat xG (0.40) + Classifica (0.20) + Forma (0.20) + Base (0.20).
-   Parametri (decay, rho, pesi) letti da Supabase (model_config).
+   Fix 1: regressione verso la media (Bayesian shrinkage) in lambdaFromUnderstat.
+   Fix 2: H2H soglia 1 + peso proporzionale al numero di match.
+   Fix 3: dataQuality nel response.
 ========================================================= */
 
 import { normalizeTeamName, h2hKey } from "../lib/teams.js";
@@ -10,48 +12,17 @@ import { getSupabase } from "../lib/supabase.js";
 
 /* =========================================================
    COSTANTI
-======================================================== */
+========================================================= */
 
 const MAX_GOALS = 10;
 
-// Medie di lega Serie A (fallback)
 const LEAGUE_HOME_XG = 1.45;
 const LEAGUE_AWAY_XG = 1.15;
 const LEAGUE_AVG_XG = 1.30;
 
-// Pesi di default (se model_config non risponde)
 const DEFAULT_WEIGHTS = {
   understat: 0.40,
-  standings: 0.20,function lambdaFromUnderstat(homeU, awayU) {
-  if (!homeU || !awayU) return null;
-  if (homeU.xgForPerGame == null || awayU.xgForPerGame == null) return null;
-
-  // Regressione verso la media lega (Bayesian shrinkage)
-  const K = 5;
-  const shrink = (observed, played) => {
-    const games = Math.max(1, played || 1);
-    const w = games / (games + K);
-    return w * observed + (1 - w) * LEAGUE_AVG_XG;
-  };
-
-  const homePlayed = homeU.matchesWithXg ?? homeU.played ?? 1;
-  const awayPlayed = awayU.matchesWithXg ?? awayU.played ?? 1;
-
-  const homeXgFor = shrink(homeU.xgForPerGame, homePlayed);
-  const homeXgAgainst = shrink(homeU.xgAgainstPerGame ?? LEAGUE_AVG_XG, homePlayed);
-  const awayXgFor = shrink(awayU.xgForPerGame, awayPlayed);
-  const awayXgAgainst = shrink(awayU.xgAgainstPerGame ?? LEAGUE_AVG_XG, awayPlayed);
-
-  const homeAttack = homeXgFor / LEAGUE_AVG_XG;
-  const awayDefense = awayXgAgainst / LEAGUE_AVG_XG;
-  const awayAttack = awayXgFor / LEAGUE_AVG_XG;
-  const homeDefense = homeXgAgainst / LEAGUE_AVG_XG;
-
-  return {
-    home: LEAGUE_HOME_XG * homeAttack * awayDefense,
-    away: LEAGUE_AWAY_XG * awayAttack * homeDefense
-  };
-}
+  standings: 0.20,
   form: 0.20,
   base: 0.20
 };
@@ -79,16 +50,8 @@ function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
 }
 
-// Time decay: peso = 0.5 ^ (giorni / halfLife)
-function timeDecay(matchDate, halfLifeDays) {
-  if (!matchDate) return 1;
-  const days = (Date.now() - new Date(matchDate).getTime()) / 86400000;
-  if (!Number.isFinite(days) || days < 0) return 1;
-  return Math.pow(0.5, days / halfLifeDays);
-}
-
 /* =========================================================
-   LETTURA PARAMETRI DA SUPABASE
+   CONFIG DA SUPABASE
 ========================================================= */
 
 async function loadModelConfig() {
@@ -133,7 +96,7 @@ async function loadModelConfig() {
 }
 
 /* =========================================================
-   ESTRAZIONE FATTORI DAL PAYLOAD
+   ESTRAZIONE FATTORI
 ========================================================= */
 
 function getStandingRow(standings, teamName) {
@@ -163,16 +126,17 @@ function getStandingRow(standings, teamName) {
 function getStandingStats(row) {
   if (!row) return null;
 
+  // BBS usa points_for / points_against per i GOL (non punti classifica)
   const games = num(
     row.games_played ?? row.played ?? row.games ?? row.matches_played
   );
   const gf = num(
     row.goals_for ?? row.gf ?? row.scored ??
-    row.points_for ?? row.pointsFor          // ← BBS usa questo
+    row.points_for ?? row.pointsFor
   );
   const ga = num(
     row.goals_against ?? row.ga ?? row.conceded ??
-    row.points_against ?? row.pointsAgainst  // ← BBS usa questo
+    row.points_against ?? row.pointsAgainst
   );
 
   if (games === null || games <= 0 || gf === null || ga === null) return null;
@@ -214,13 +178,9 @@ function getH2HMatches(h2h, homeTeam, awayTeam) {
 }
 
 /* =========================================================
-   SUB-MODELLI (λ per singola fonte)
+   SUB-MODELLI
 ========================================================= */
 
-/**
- * Classifica: forza attacco/difesa rispetto alla media lega.
- * Formula corretta: attacco_home * difesa_away, non media pesata.
- */
 function lambdaFromStandings(homeStats, awayStats) {
   if (!homeStats || !awayStats) return null;
 
@@ -236,14 +196,15 @@ function lambdaFromStandings(homeStats, awayStats) {
 }
 
 /**
- * Understat: xG fatti/subiti per partita, normalizzati sulla media lega.
+ * FIX 1: regressione verso la media (Bayesian shrinkage).
+ * Con poche partite, "tira" verso LEAGUE_AVG_XG; con molte, si fida dei dati.
  */
 function lambdaFromUnderstat(homeU, awayU) {
   if (!homeU || !awayU) return null;
   if (homeU.xgForPerGame == null || awayU.xgForPerGame == null) return null;
 
-  // Regressione verso la media lega (Bayesian shrinkage)
   const K = 5;
+
   const shrink = (observed, played) => {
     const games = Math.max(1, played || 1);
     const w = games / (games + K);
@@ -269,9 +230,6 @@ function lambdaFromUnderstat(homeU, awayU) {
   };
 }
 
-/**
- * Forma: gol fatti/subiti nelle ultime 5 partite, con fattore punti.
- */
 function lambdaFromForm(homeForm, awayForm) {
   if (!homeForm || !awayForm) return null;
 
@@ -313,7 +271,6 @@ function calculateExpectedGoals(body, config) {
     homeAway: true, h2h: false
   };
 
-  // --- Sotto-modelli ---
   const lamUS = lambdaFromUnderstat(homeU, awayU);
   if (lamUS) {
     sources.push({ key: "understat", ...lamUS });
@@ -332,10 +289,8 @@ function calculateExpectedGoals(body, config) {
     factors.form = true;
   }
 
-  // Base: sempre disponibile
   sources.push({ key: "base", home: 1.35, away: 1.05 });
 
-  // --- Media pesata ---
   let totalW = 0, homeXG = 0, awayXG = 0;
   for (const s of sources) {
     const w = config.weights[s.key] ?? 0.2;
@@ -346,7 +301,7 @@ function calculateExpectedGoals(body, config) {
   homeXG /= totalW;
   awayXG /= totalW;
 
-  // --- H2H: solo ultimi 3 anni, aggiustamento massimo ±5% ---
+  // ---- FIX 2: H2H soglia 1 + peso proporzionale ----
   const h2hMatches = getH2HMatches(body.h2h, homeTeam, awayTeam);
   const threeYearsAgo = Date.now() - 3 * 365 * 86400000;
   const recentH2H = h2hMatches.filter((m) => {
@@ -371,10 +326,11 @@ function calculateExpectedGoals(body, config) {
       cnt++;
     }
 
-    if (cnt >= 2) {
+    if (cnt >= 1) {
       const avgH = hg / cnt;
       const avgA = ag / cnt;
-      // Con 1 match l'aggiustamento è dimezzato (±2.5%), con 2+ è pieno (±5%)
+
+      // Con 1 match l'aggiustamento è ±2.5%, con 2+ è ±5%
       const h2hWeight = Math.min(1, cnt / 2);
       homeXG *= clamp(0.95 + (avgH / 1.45) * 0.05 * h2hWeight, 0.95, 1.05);
       awayXG *= clamp(0.95 + (avgA / 1.15) * 0.05 * h2hWeight, 0.95, 1.05);
@@ -382,15 +338,14 @@ function calculateExpectedGoals(body, config) {
       h2hInfo = {
         available: true, matches: cnt,
         averageHomeGoals: Number(avgH.toFixed(2)),
-        averageAwayGoals: Number(avgA.toFixed(2))
+        averageAwayGoals: Number(avgA.toFixed(2)),
+        weight: Number(h2hWeight.toFixed(2))
       };
     }
   }
 
-  // --- Vantaggio casa (una volta sola) ---
   homeXG *= 1.06;
 
-  // --- Clamp finale ---
   homeXG = clamp(homeXG, 0.15, 4.5);
   awayXG = clamp(awayXG, 0.10, 4.0);
 
@@ -548,7 +503,7 @@ function calculateConfidence(expected) {
 }
 
 /* =========================================================
-   TRACKING SUPABASE (non bloccante)
+   TRACKING SUPABASE
 ========================================================= */
 
 async function trackPrediction(body, expected, probabilities, config) {
@@ -557,8 +512,7 @@ async function trackPrediction(body, expected, probabilities, config) {
 
   const matchId = body?.match?.id;
 
-  // FIX: se non c'è un UUID BBS, non salviamo
-  // (evita match_id orfani che non combaceranno mai con results)
+  // Skip se manca UUID valido
   if (!matchId || typeof matchId !== "string" || !matchId.includes("-")) {
     console.warn("trackPrediction: match_id non valido, salto il salvataggio");
     return;
@@ -635,16 +589,10 @@ export default async function handler(req, res) {
       });
     }
 
-    // Carica parametri da Supabase
     const config = await loadModelConfig();
-
-    // Calcola xG
     const expected = calculateExpectedGoals(body, config);
-
-    // Matrice Poisson + Dixon-Coles
     const matrix = buildMatrix(expected.home, expected.away, config.dixonColesRho);
 
-    // Mercati
     const probabilities = calculate1X2(matrix);
     const doubleChance = calculateDoubleChance(probabilities);
     const overUnder = calculateOverUnder(matrix);
@@ -654,13 +602,16 @@ export default async function handler(req, res) {
     const fairOdds = calculateFairOdds(probabilities, overUnder, btts);
     const confidence = calculateConfidence(expected);
 
-    // Tracking (non bloccante)
     try {
       await Promise.race([
         trackPrediction(body, expected, probabilities, config),
         new Promise((r) => setTimeout(r, 2500))
       ]);
     } catch {}
+
+    // --- FIX 3: dataQuality ---
+    const homeData = getUnderstatEntry(body.understat, homeTeam);
+    const awayData = getUnderstatEntry(body.understat, awayTeam);
 
     return res.status(200).json({
       ok: true,
@@ -675,27 +626,25 @@ export default async function handler(req, res) {
         dixonColesRho: config.dixonColesRho
       },
       xgSource: expected.source,
-dataQuality: {
-  homeTeam: (() => {
-    const d = body.understat?.[normalizeTeamName(homeTeam)];
-    return {
-      matches: d?.matchesWithXg ?? 0,
-      played: d?.played ?? 0,
-      xgForPerGame: d?.xgForPerGame ?? null,
-      xgAgainstPerGame: d?.xgAgainstPerGame ?? null
-    };
-  })(),
-  awayTeam: (() => {
-    const d = body.understat?.[normalizeTeamName(awayTeam)];
-    return {
-      matches: d?.matchesWithXg ?? 0,
-      played: d?.played ?? 0,
-      xgForPerGame: d?.xgForPerGame ?? null,
-      xgAgainstPerGame: d?.xgAgainstPerGame ?? null
-    };
-  })()
-},
-factorsUsed: expected.factors,
+      expectedGoals: {
+        home: Number(expected.home.toFixed(2)),
+        away: Number(expected.away.toFixed(2))
+      },
+      dataQuality: {
+        homeTeam: {
+          matches: homeData?.matchesWithXg ?? 0,
+          played: homeData?.played ?? 0,
+          xgForPerGame: homeData?.xgForPerGame ?? null,
+          xgAgainstPerGame: homeData?.xgAgainstPerGame ?? null
+        },
+        awayTeam: {
+          matches: awayData?.matchesWithXg ?? 0,
+          played: awayData?.played ?? 0,
+          xgForPerGame: awayData?.xgForPerGame ?? null,
+          xgAgainstPerGame: awayData?.xgAgainstPerGame ?? null
+        }
+      },
+      factorsUsed: expected.factors,
       h2h: expected.h2h,
       probabilities,
       doubleChance,
