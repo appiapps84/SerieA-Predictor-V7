@@ -1,5 +1,13 @@
 /* =========================================================
-   api/predict.js — V7 con log di debug
+   api/predict.js — V7 finale
+   Poisson + Dixon-Coles multi-fattore.
+
+   FIX applicati:
+   - Fix 1: regressione verso media (Bayesian shrinkage) in lambdaFromUnderstat
+   - Fix 2: H2H soglia 1 + peso proporzionale
+   - Fix 3: dataQuality nel response
+   - Fix 4: media invece di prodotto in lambdaFromStandings e lambdaFromForm
+            (evita di amplificare i valori con pochi dati)
 ========================================================= */
 
 import { normalizeTeamName, h2hKey } from "../lib/teams.js";
@@ -20,6 +28,10 @@ const DEFAULT_WEIGHTS = {
 const DEFAULT_DECAY_HALF_LIFE_DAYS = 90;
 const DEFAULT_DIXON_COLES_RHO = -0.08;
 
+/* =========================================================
+   MATH
+========================================================= */
+
 function poisson(k, lambda) {
   if (!Number.isFinite(lambda) || lambda <= 0) return k === 0 ? 1 : 0;
   let fact = 1;
@@ -35,6 +47,10 @@ function num(v) {
 function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
 }
+
+/* =========================================================
+   CONFIG
+========================================================= */
 
 async function loadModelConfig() {
   const defaults = {
@@ -76,6 +92,10 @@ async function loadModelConfig() {
     return defaults;
   }
 }
+
+/* =========================================================
+   ESTRAZIONE FATTORI
+========================================================= */
 
 function getStandingRow(standings, teamName) {
   if (!Array.isArray(standings)) return null;
@@ -154,6 +174,15 @@ function getH2HMatches(h2h, homeTeam, awayTeam) {
   return Array.isArray(arr) ? arr : [];
 }
 
+/* =========================================================
+   SUB-MODELLI
+========================================================= */
+
+/**
+ * Fix 4: media invece di prodotto.
+ * Il prodotto di due fattori sopra-media amplifica troppo con pochi dati.
+ * La media attenua e rimane stabile.
+ */
 function lambdaFromStandings(homeStats, awayStats) {
   if (!homeStats || !awayStats) return null;
 
@@ -163,11 +192,14 @@ function lambdaFromStandings(homeStats, awayStats) {
   const homeDefense = homeStats.goalsAgainstPerGame / LEAGUE_HOME_XG;
 
   return {
-    home: LEAGUE_HOME_XG * homeAttack * awayDefense,
-    away: LEAGUE_AWAY_XG * awayAttack * homeDefense
+    home: LEAGUE_HOME_XG * ((homeAttack + awayDefense) / 2),
+    away: LEAGUE_AWAY_XG * ((awayAttack + homeDefense) / 2)
   };
 }
 
+/**
+ * Fix 1: regressione verso la media (Bayesian shrinkage).
+ */
 function lambdaFromUnderstat(homeU, awayU) {
   if (!homeU || !awayU) return null;
   if (homeU.xgForPerGame == null || awayU.xgForPerGame == null) return null;
@@ -192,15 +224,15 @@ function lambdaFromUnderstat(homeU, awayU) {
   const awayAttack = awayXgFor / LEAGUE_AVG_XG;
   const homeDefense = homeXgAgainst / LEAGUE_AVG_XG;
 
-  const lambdaHome = LEAGUE_HOME_XG * homeAttack * awayDefense;
-  const lambdaAway = LEAGUE_AWAY_XG * awayAttack * homeDefense;
-
   return {
-    home: lambdaHome,
-    away: lambdaAway
+    home: LEAGUE_HOME_XG * homeAttack * awayDefense,
+    away: LEAGUE_AWAY_XG * awayAttack * homeDefense
   };
 }
 
+/**
+ * Fix 4 (anche qui): media invece di prodotto.
+ */
 function lambdaFromForm(homeForm, awayForm) {
   if (!homeForm || !awayForm) return null;
 
@@ -216,10 +248,14 @@ function lambdaFromForm(homeForm, awayForm) {
   };
 
   return {
-    home: LEAGUE_HOME_XG * homeAttack * awayDefense * formFactor(homeForm),
-    away: LEAGUE_AWAY_XG * awayAttack * homeDefense * formFactor(awayForm)
+    home: LEAGUE_HOME_XG * ((homeAttack + awayDefense) / 2) * formFactor(homeForm),
+    away: LEAGUE_AWAY_XG * ((awayAttack + homeDefense) / 2) * formFactor(awayForm)
   };
 }
+
+/* =========================================================
+   EXPECTED GOALS FINALE
+========================================================= */
 
 function calculateExpectedGoals(body, config) {
   const homeTeam = body.homeTeam;
@@ -258,10 +294,6 @@ function calculateExpectedGoals(body, config) {
 
   sources.push({ key: "base", home: 1.35, away: 1.05 });
 
-  sources.forEach(function(s) {
-    console.log("SOURCE_" + s.key + " home=" + s.home + " away=" + s.away);
-  });
-
   let totalW = 0, homeXG = 0, awayXG = 0;
   for (const s of sources) {
     const w = config.weights[s.key] ?? 0.2;
@@ -271,8 +303,6 @@ function calculateExpectedGoals(body, config) {
   }
   homeXG /= totalW;
   awayXG /= totalW;
-
-  console.log("MIX_RESULT home=" + homeXG + " away=" + awayXG + " totalW=" + totalW);
 
   const h2hMatches = getH2HMatches(body.h2h, homeTeam, awayTeam);
   const threeYearsAgo = Date.now() - 3 * 365 * 86400000;
@@ -328,11 +358,15 @@ function calculateExpectedGoals(body, config) {
   return {
     home: Number(homeXG.toFixed(3)),
     away: Number(awayXG.toFixed(3)),
-    source: "Modello: " + used.join(" + "),
+    source: `Modello: ${used.join(" + ")}`,
     factors,
     h2h: h2hInfo
   };
 }
+
+/* =========================================================
+   DIXON-COLES + MERCATI
+========================================================= */
 
 function dixonColesAdjustment(h, a, lH, lA, rho) {
   if (h === 0 && a === 0) return 1 - lH * lA * rho;
@@ -421,7 +455,7 @@ function calculateExactScores(matrix) {
   for (let h = 0; h <= MAX_GOALS; h++) {
     for (let a = 0; a <= MAX_GOALS; a++) {
       rows.push({
-        score: h + "-" + a,
+        score: `${h}-${a}`,
         home: h, away: a,
         probability: matrix[h][a] || 0
       });
@@ -470,6 +504,10 @@ function calculateConfidence(expected) {
   return Math.round(clamp(c, 30, 95));
 }
 
+/* =========================================================
+   TRACKING SUPABASE
+========================================================= */
+
 async function trackPrediction(body, expected, probabilities, config) {
   const supabase = getSupabase();
   if (!supabase) return;
@@ -512,6 +550,10 @@ async function trackPrediction(body, expected, probabilities, config) {
   }
 }
 
+/* =========================================================
+   HANDLER
+========================================================= */
+
 async function parseBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
   if (typeof req.body === "string") {
@@ -522,8 +564,6 @@ async function parseBody(req) {
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
-
-  console.log("SENTINELLA_V7 " + new Date().toISOString() + " handler attivo");
 
   if (req.method !== "POST") {
     return res.status(405).json({ ok: false, error: "METHOD_NOT_ALLOWED" });
