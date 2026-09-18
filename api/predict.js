@@ -213,12 +213,29 @@ function lambdaFromUnderstat(homeU, awayU) {
   if (!homeU || !awayU) return null;
   if (homeU.xgForPerGame == null || awayU.xgForPerGame == null) return null;
 
-  const homeAttack = homeU.xgForPerGame / LEAGUE_AVG_XG;
-  const awayDefense = (awayU.xgAgainstPerGame ?? LEAGUE_AVG_XG) / LEAGUE_AVG_XG;
-  const awayAttack = awayU.xgForPerGame / LEAGUE_AVG_XG;
-  const homeDefense = (homeU.xgAgainstPerGame ?? LEAGUE_AVG_XG) / LEAGUE_AVG_XG;
+  // Regressione verso la media lega (Bayesian shrinkage)
+  // Con poche partite, "tira" verso LEAGUE_AVG_XG; con molte, si fida dei dati
+  const K = 5;
 
-  // La forza combinata attacco * difesa avversaria è più realistica della media 0.6/0.4
+  const shrink = (observed, played) => {
+    const games = Math.max(1, played || 1);
+    const w = games / (games + K);
+    return w * observed + (1 - w) * LEAGUE_AVG_XG;
+  };
+
+  const homePlayed = homeU.matchesWithXg ?? homeU.played ?? 1;
+  const awayPlayed = awayU.matchesWithXg ?? awayU.played ?? 1;
+
+  const homeXgFor = shrink(homeU.xgForPerGame, homePlayed);
+  const homeXgAgainst = shrink(homeU.xgAgainstPerGame ?? LEAGUE_AVG_XG, homePlayed);
+  const awayXgFor = shrink(awayU.xgForPerGame, awayPlayed);
+  const awayXgAgainst = shrink(awayU.xgAgainstPerGame ?? LEAGUE_AVG_XG, awayPlayed);
+
+  const homeAttack = homeXgFor / LEAGUE_AVG_XG;
+  const awayDefense = awayXgAgainst / LEAGUE_AVG_XG;
+  const awayAttack = awayXgFor / LEAGUE_AVG_XG;
+  const homeDefense = homeXgAgainst / LEAGUE_AVG_XG;
+
   return {
     home: LEAGUE_HOME_XG * homeAttack * awayDefense,
     away: LEAGUE_AWAY_XG * awayAttack * homeDefense
