@@ -505,13 +505,18 @@ function calculateConfidence(expected) {
    TRACKING SUPABASE (non bloccante)
 ========================================================= */
 
-async function trackPrediction(body, expected, probabilities, config, modelId) {
+async function trackPrediction(body, expected, probabilities, config) {
   const supabase = getSupabase();
   if (!supabase) return;
 
-  const matchId =
-    body?.match?.id ??
-    `${normalizeTeamName(body.homeTeam)}-${normalizeTeamName(body.awayTeam)}`;
+  const matchId = body?.match?.id;
+
+  // FIX: se non c'è un UUID BBS, non salviamo
+  // (evita match_id orfani che non combaceranno mai con results)
+  if (!matchId || typeof matchId !== "string" || !matchId.includes("-")) {
+    console.warn("trackPrediction: match_id non valido, salto il salvataggio");
+    return;
+  }
 
   const pick =
     probabilities.home >= probabilities.draw && probabilities.home >= probabilities.away
