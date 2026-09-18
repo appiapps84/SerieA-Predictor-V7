@@ -213,6 +213,16 @@ function lambdaFromUnderstat(homeU, awayU) {
   const awayXgFor = shrink(awayU.xgForPerGame, awayPlayed);
   const awayXgAgainst = shrink(awayU.xgAgainstPerGame ?? LEAGUE_AVG_XG, awayPlayed);
 
+  console.log("LAMBDA_DEBUG", JSON.stringify({
+    homeRaw: homeU.xgForPerGame,
+    homePlayed,
+    K,
+    homeShrunk: homeXgFor,
+    awayRaw: awayU.xgForPerGame,
+    awayPlayed,
+    awayShrunk: awayXgFor
+  }));
+
   const homeAttack = homeXgFor / LEAGUE_AVG_XG;
   const awayDefense = awayXgAgainst / LEAGUE_AVG_XG;
   const awayAttack = awayXgFor / LEAGUE_AVG_XG;
@@ -226,7 +236,6 @@ function lambdaFromUnderstat(homeU, awayU) {
     away: lambdaAway
   };
 }
-
 function lambdaFromForm(homeForm, awayForm) {
   if (!homeForm || !awayForm) return null;
 
