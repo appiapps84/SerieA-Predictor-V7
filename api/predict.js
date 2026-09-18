@@ -329,7 +329,7 @@ function calculateExpectedGoals(body, config) {
 
   let h2hInfo = { available: false };
 
-  if (recentH2H.length >= 2) {
+  if (recentH2H.length >= 1) {
     const wanted = normalizeTeamName(homeTeam);
     let hg = 0, ag = 0, cnt = 0;
 
@@ -347,8 +347,10 @@ function calculateExpectedGoals(body, config) {
     if (cnt >= 2) {
       const avgH = hg / cnt;
       const avgA = ag / cnt;
-      homeXG *= clamp(0.95 + (avgH / 1.45) * 0.05, 0.95, 1.05);
-      awayXG *= clamp(0.95 + (avgA / 1.15) * 0.05, 0.95, 1.05);
+      // Con 1 match l'aggiustamento è dimezzato (±2.5%), con 2+ è pieno (±5%)
+      const h2hWeight = Math.min(1, cnt / 2);
+      homeXG *= clamp(0.95 + (avgH / 1.45) * 0.05 * h2hWeight, 0.95, 1.05);
+      awayXG *= clamp(0.95 + (avgA / 1.15) * 0.05 * h2hWeight, 0.95, 1.05);
       factors.h2h = true;
       h2hInfo = {
         available: true, matches: cnt,
@@ -646,10 +648,24 @@ export default async function handler(req, res) {
         dixonColesRho: config.dixonColesRho
       },
       xgSource: expected.source,
-      expectedGoals: {
-        home: Number(expected.home.toFixed(2)),
-        away: Number(expected.away.toFixed(2))
-      },
+expectedGoals: {
+  home: Number(expected.home.toFixed(2)),
+  away: Number(expected.away.toFixed(2))
+},
+dataQuality: {
+  homeTeam: {
+    matches: body.understat?.[normalizeTeamName(homeTeam)]?.matchesWithXg ?? 0,
+    xgForPerGame: body.understat?.[normalizeTeamName(homeTeam)]?.xgForPerGame ?? null,
+    xgAgainstPerGame: body.understat?.[normalizeTeamName(homeTeam)]?.xgAgainstPerGame ?? null,
+    played: body.understat?.[normalizeTeamName(homeTeam)]?.played ?? 0
+  },
+  awayTeam: {
+    matches: body.understat?.[normalizeTeamName(awayTeam)]?.matchesWithXg ?? 0,
+    xgForPerGame: body.understat?.[normalizeTeamName(awayTeam)]?.xgForPerGame ?? null,
+    xgAgainstPerGame: body.understat?.[normalizeTeamName(awayTeam)]?.xgAgainstPerGame ?? null,
+    played: body.understat?.[normalizeTeamName(awayTeam)]?.played ?? 0
+  }
+},
       factorsUsed: expected.factors,
       h2h: expected.h2h,
       probabilities,
