@@ -2,10 +2,684 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Serie A Predictor V7</title>
+  <style>
+    :root {
+      --bg:#07111f; --panel:#0d1b2d; --panel-2:#102238; --border:#1d3552;
+      --text:#f4f7fb; --muted:#91a4bb; --accent:#3b82f6; --accent-2:#60a5fa;
+      --success:#22c55e; --danger:#ef4444; --warning:#f59e0b;
+    }
+    * { box-sizing:border-box; }
+    body {
+      margin:0; font-family:Arial,Helvetica,sans-serif;
+      background:radial-gradient(circle at top,#102a48 0%,var(--bg) 45%);
+      color:var(--text); min-height:100vh;
+    }
+    .container { width:min(1180px,calc(100% - 30px)); margin:0 auto; padding:28px 0 50px; }
+    header { text-align:center; margin-bottom:28px; }
+    header h1 { margin:0; font-size:clamp(28px,5vw,46px); letter-spacing:-1px; }
+    header p { margin:10px 0 0; color:var(--muted); font-size:15px; }
+    .topbar { display:grid; grid-template-columns:1fr auto; gap:14px; align-items:center; margin-bottom:18px; }
+    .status {
+      background:var(--panel); border:1px solid var(--border); border-radius:12px;
+      padding:13px 16px; color:var(--muted); font-size:14px; min-height:46px;
+      display:flex; align-items:center;
+    }
+    .status.success { color:#86efac; border-color:rgba(34,197,94,.4); }
+    .status.error { color:#fca5a5; border-color:rgba(239,68,68,.4); }
+    .status.loading { color:#93c5fd; border-color:rgba(59,130,246,.4); }
+    button {
+      border:0; border-radius:10px; padding:13px 20px; font-weight:700;
+      cursor:pointer; color:#fff; background:var(--accent); transition:.2s;
+    }
+    button:hover { background:var(--accent-2); transform:translateY(-1px); }
+    button:disabled { opacity:.55; cursor:not-allowed; transform:none; }
+    button.secondary { background:#274a75; }
+    .panel {
+      background:rgba(13,27,45,.95); border:1px solid var(--border);
+      border-radius:16px; padding:20px; margin-bottom:18px;
+      box-shadow:0 10px 35px rgba(0,0,0,.18);
+    }
+    .panel h2 { margin:0 0 16px; font-size:19px; }
+    .selectors { display:grid; grid-template-columns:1fr auto 1fr; gap:15px; align-items:end; }
+    .field label { display:block; color:var(--muted); font-size:13px; margin-bottom:7px; }
+    select {
+      width:100%; background:#091728; color:var(--text); border:1px solid var(--border);
+      border-radius:10px; padding:13px; font-size:15px; outline:none;
+    }
+    select:focus { border-color:var(--accent); }
+    .vs { font-weight:800; color:var(--muted); padding-bottom:13px; }
+    .predict-wrap { margin-top:18px; text-align:center; }
+    .predict-button { min-width:240px; font-size:16px; padding:14px 24px; }
+    .section-title { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:13px; }
+    .section-title h2 { margin:0; }
+    .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+    .grid-2 { grid-template-columns:repeat(2,1fr); }
+    .card {
+      background:var(--panel-2); border:1px solid var(--border);
+      border-radius:12px; padding:16px; min-height:92px;
+    }
+    .card .label { color:var(--muted); font-size:12px; margin-bottom:8px; }
+    .card .value { font-size:25px; font-weight:800; }
+    .card .sub { color:var(--muted); margin-top:5px; font-size:12px; }
+    .big-result { text-align:center; padding:24px 16px; }
+    .big-result .value { font-size:clamp(34px,7vw,58px); }
+    .probability-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+    .prob-card {
+      text-align:center; padding:20px 12px;
+      background:var(--panel-2); border:1px solid var(--border); border-radius:12px;
+    }
+    .prob-card .label { color:var(--muted); font-size:13px; margin-bottom:8px; }
+    .prob-card .value { font-size:30px; font-weight:800; }
+    .scores { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+    .score-card {
+      text-align:center; background:var(--panel-2);
+      border:1px solid var(--border); border-radius:10px; padding:13px 7px;
+    }
+    .score-card .score { font-size:20px; font-weight:800; }
+    .score-card .prob { margin-top:5px; color:var(--muted); font-size:12px; }
+    .factor-list { display:grid; gap:9px; }
+    .factor {
+      display:flex; justify-content:space-between; gap:12px;
+      background:var(--panel-2); border:1px solid var(--border);
+      border-radius:10px; padding:12px 14px;
+    }
+    .factor-name { color:var(--muted); }
+    .factor-value { font-weight:700; }
+    .yes { color:#86efac; } .no { color:#fca5a5; }
+    .info { color:var(--muted); font-size:13px; line-height:1.55; }
+    .hidden { display:none !important; }
+    .error-box {
+      background:rgba(127,29,29,.28); border:1px solid rgba(239,68,68,.45);
+      color:#fecaca; border-radius:12px; padding:14px;
+      white-space:pre-wrap; word-break:break-word; font-size:13px; margin-bottom:18px;
+    }
+    .footer { text-align:center; color:var(--muted); font-size:12px; margin-top:28px; }
+    .bt-row { display:flex; justify-content:space-between; padding:9px 14px; border-bottom:1px solid var(--border); font-size:14px; }
+    .bt-row:last-child { border-bottom:0; }
+    .hit { color:#86efac; font-weight:700; }
+    .miss { color:#fca5a5; font-weight:700; }
+    @media (max-width:800px) {
+      .topbar { grid-template-columns:1fr; }
+      .selectors { grid-template-columns:1fr; }
+      .vs { text-align:center; padding:0; }
+      .grid,.grid-2,.probability-grid { grid-template-columns:repeat(2,1fr); }
+      .scores { grid-template-columns:repeat(2,1fr); }
+    }
+    @media (max-width:500px) {
+      .container { width:min(100% - 18px,1180px); padding-top:18px; }
+      .panel { padding:15px; }
+      .grid,.grid-2,.probability-grid { grid-template-columns:1fr; }
+      .scores { grid-template-columns:repeat(2,1fr); }
+      .card .value { font-size:22px; }
+    }
+  </style>
 </head>
 <body>
-  <h1>Serie A Predictor V7</h1>
-  <p>Placeholder — frontend in arrivo.</p>
-</body>
-</html>
+<div class="container">
+
+  <header>
+    <h1>⚽ Serie A Predictor V7</h1>
+    <p>Poisson + Dixon-Coles multi-fattore · BBS + Understat xG</p>
+  </header>
+
+  <div class="topbar">
+    <div id="status" class="status">In attesa di sincronizzazione...</div>
+    <button id="syncButton" type="button">🔄 Sincronizza</button>
+  </div>
+
+  <section class="panel">
+    <h2>Seleziona partita</h2>
+    <div class="selectors">
+      <div class="field">
+        <label for="homeTeam">Squadra casa</label>
+        <select id="homeTeam"><option value="">Caricamento...</option></select>
+      </div>
+      <div class="vs">VS</div>
+      <div class="field">
+        <label for="awayTeam">Squadra ospite</label>
+        <select id="awayTeam"><option value="">Caricamento...</option></select>
+      </div>
+    </div>
+    <div class="predict-wrap">
+      <button id="predictButton" class="predict-button" type="button">📊 Calcola previsione</button>
+    </div>
+  </section>
+
+  <div id="errorBox" class="error-box hidden"></div>
+
+  <div id="results" class="hidden">
+
+    <section class="panel">
+      <div class="section-title"><h2>🎯 Expected Goals</h2></div>
+      <div class="grid grid-2">
+        <div class="card big-result">
+          <div class="label">xG Casa</div>
+          <div id="homeXG" class="value">—</div>
+          <div id="homeXGsub" class="sub"></div>
+        </div>
+        <div class="card big-result">
+          <div class="label">xG Ospite</div>
+          <div id="awayXG" class="value">—</div>
+          <div id="awayXGsub" class="sub"></div>
+        </div>
+      </div>
+      <div class="info" style="margin-top:15px;">Fonte: <strong id="xgSource">—</strong></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title"><h2>1X2</h2></div>
+      <div class="probability-grid">
+        <div class="prob-card"><div class="label">1 — Casa</div><div id="probHome" class="value">—</div></div>
+        <div class="prob-card"><div class="label">X — Pareggio</div><div id="probDraw" class="value">—</div></div>
+        <div class="prob-card"><div class="label">2 — Ospite</div><div id="probAway" class="value">—</div></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title"><h2>Doppia Chance</h2></div>
+      <div class="grid">
+        <div class="card"><div class="label">1X</div><div id="double1X" class="value">—</div></div>
+        <div class="card"><div class="label">X2</div><div id="doubleX2" class="value">—</div></div>
+        <div class="card"><div class="label">12</div><div id="double12" class="value">—</div></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title"><h2>⚽ Over / Under</h2></div>
+      <div class="grid grid-2">
+        <div class="card"><div class="label">Over 1.5</div><div id="over15" class="value">—</div></div>
+        <div class="card"><div class="label">Under 1.5</div><div id="under15" class="value">—</div></div>
+        <div class="card"><div class="label">Over 2.5</div><div id="over25" class="value">—</div></div>
+        <div class="card"><div class="label">Under 2.5</div><div id="under25" class="value">—</div></div>
+        <div class="card"><div class="label">Over 3.5</div><div id="over35" class="value">—</div></div>
+        <div class="card"><div class="label">Under 3.5</div><div id="under35" class="value">—</div></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title"><h2>BTTS — Gol/Gol</h2></div>
+      <div class="grid grid-2">
+        <div class="card"><div class="label">Sì</div><div id="bttsYes" class="value">—</div></div>
+        <div class="card"><div class="label">No</div><div id="bttsNo" class="value">—</div></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title"><h2>Handicap</h2></div>
+      <div class="grid">
+        <div class="card"><div class="label">Casa -1</div><div id="handicapHomeMinus1" class="value">—</div></div>
+        <div class="card"><div class="label">Casa +1</div><div id="handicapHomePlus1" class="value">—</div></div>
+        <div class="card"><div class="label">Ospite +1</div><div id="handicapAwayPlus1" class="value">—</div></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title"><h2>Risultati esatti più probabili</h2></div>
+      <div id="exactScores" class="scores"></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title"><h2>Quote eque del modello</h2></div>
+      <div class="grid grid-2">
+        <div class="card"><div class="label">Casa</div><div id="fairHome" class="value">—</div></div>
+        <div class="card"><div class="label">Pareggio</div><div id="fairDraw" class="value">—</div></div>
+        <div class="card"><div class="label">Ospite</div><div id="fairAway" class="value">—</div></div>
+        <div class="card"><div class="label">Over 2.5</div><div id="fairOver25" class="value">—</div></div>
+        <div class="card"><div class="label">Under 2.5</div><div id="fairUnder25" class="value">—</div></div>
+        <div class="card"><div class="label">BTTS Sì</div><div id="fairBttsYes" class="value">—</div></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title"><h2>🧠 Fattori utilizzati</h2></div>
+      <div class="factor-list">
+        <div class="factor"><span class="factor-name">xG Understat</span><span id="factorUnderstat" class="factor-value">—</span></div>
+        <div class="factor"><span class="factor-name">Classifica</span><span id="factorStandings" class="factor-value">—</span></div>
+        <div class="factor"><span class="factor-name">Forma recente</span><span id="factorForm" class="factor-value">—</span></div>
+        <div class="factor"><span class="factor-name">Casa / Trasferta</span><span id="factorHomeAway" class="factor-value">—</span></div>
+        <div class="factor"><span class="factor-name">H2H (≤ 3 anni)</span><span id="factorH2H" class="factor-value">—</span></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title"><h2>🤝 H2H</h2></div>
+      <div id="h2hSummary" class="info">Nessun dato H2H disponibile.</div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title"><h2>📈 Confidence modello</h2></div>
+      <div class="card">
+        <div class="label">Affidabilità stimata</div>
+        <div id="confidence" class="value">—</div>
+        <div class="sub">Indicatore interno, non probabilità di successo.</div>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <div class="section-title">
+      <h2>🧪 Backtest — accuratezza reale</h2>
+      <button id="backtestButton" class="secondary" type="button">Aggiorna</button>
+    </div>
+    <div id="backtestContent" class="info">
+      Premi «Aggiorna» dopo alcune previsioni per vedere l'accuratezza 1X2 reale del modello.
+    </div>
+  </section>
+
+  <div class="footer">
+    Serie A Predictor V7 · BBS + Understat · Poisson + Dixon-Coles
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ================= STATE ================= */
+const state = {
+  matches: [],
+  standings: [],
+  understat: {},
+  form: {},
+  h2h: {},
+  syncData: null,
+  prediction: null
+};
+
+/* ================= HELPERS ================= */
+const $ = (id) => document.getElementById(id);
+
+function setText(id, value) {
+  const el = $(id);
+  if (el) el.textContent = value;
+}
+
+function formatPercent(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? `${(n * 100).toFixed(1)}%` : "—";
+}
+
+function formatOdds(v) {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n.toFixed(2) : "—";
+}
+
+function formatXG(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(2) : "—";
+}
+
+function setStatus(msg, type = "") {
+  const el = $("status");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = "status" + (type ? " " + type : "");
+}
+
+function showError(msg) {
+  const box = $("errorBox");
+  if (!box) return;
+  box.textContent = msg || "Errore sconosciuto.";
+  box.classList.remove("hidden");
+}
+
+function hideError() {
+  const box = $("errorBox");
+  if (!box) return;
+  box.textContent = "";
+  box.classList.add("hidden");
+}
+
+function showResults() { $("results")?.classList.remove("hidden"); }
+function hideResults() { $("results")?.classList.add("hidden"); }
+
+async function fetchWithTimeout(url, opts = {}, timeoutMs = 30000) {
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...opts, signal: c.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function readJson(response) {
+  const text = await response.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(`Risposta non JSON. HTTP ${response.status}: ${text.slice(0, 200)}`);
+  }
+  if (!response.ok) {
+    throw new Error(data?.message || data?.error || `Errore HTTP ${response.status}`);
+  }
+  return data;
+}
+
+/* ================= PARSING ================= */
+function extractTeamName(match, side) {
+  if (!match) return "";
+  const v = side === "home"
+    ? match.home ?? match.homeTeam ?? match.home_team ?? match.teams?.home
+    : match.away ?? match.awayTeam ?? match.away_team ?? match.teams?.away;
+  if (typeof v === "object" && v !== null) {
+    return String(v.name || v.title || "").trim();
+  }
+  return String(v || "").trim();
+}
+
+function normalizeTeamName(v) {
+  if (typeof v === "object" && v !== null) {
+    v = v.name || v.title || "";
+  }
+  return String(v || "").trim().toLowerCase();
+}
+
+function getAvailableTeams(matches) {
+  const names = new Set();
+  for (const m of matches || []) {
+    const h = extractTeamName(m, "home");
+    const a = extractTeamName(m, "away");
+    if (h) names.add(h);
+    if (a) names.add(a);
+  }
+  return Array.from(names).sort((a, b) => a.localeCompare(b, "it"));
+}
+
+function populateTeams() {
+  const home = $("homeTeam");
+  const away = $("awayTeam");
+  if (!home || !away) return;
+
+  const teams = getAvailableTeams(state.matches);
+  home.innerHTML = "";
+  away.innerHTML = "";
+
+  if (teams.length === 0) {
+    home.innerHTML = '<option value="">Nessuna squadra</option>';
+    away.innerHTML = '<option value="">Nessuna squadra</option>';
+    return;
+  }
+
+  for (const sel of [home, away]) {
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "Seleziona squadra";
+    sel.appendChild(empty);
+
+    for (const t of teams) {
+      const o = document.createElement("option");
+      o.value = t;
+      o.textContent = t;
+      sel.appendChild(o);
+    }
+  }
+
+  if (teams.length >= 2) {
+    home.value = teams[0];
+    away.value = teams[1];
+  }
+}
+
+function findMatch(homeTeam, awayTeam) {
+  const h = normalizeTeamName(homeTeam);
+  const a = normalizeTeamName(awayTeam);
+  return state.matches.find((m) => {
+    return normalizeTeamName(extractTeamName(m, "home")) === h &&
+           normalizeTeamName(extractTeamName(m, "away")) === a;
+  }) || null;
+}
+
+function getUnderstatFor(teamName) {
+  const wanted = normalizeTeamName(teamName);
+  if (state.understat[wanted]) return state.understat[wanted];
+  for (const [, v] of Object.entries(state.understat || {})) {
+    if (normalizeTeamName(v?.team) === wanted) return v;
+  }
+  return null;
+}
+
+/* ================= SYNC ================= */
+async function syncData() {
+  const btn = $("syncButton");
+  hideError();
+  if (btn) btn.disabled = true;
+  setStatus("Sincronizzazione in corso...", "loading");
+
+  try {
+    const r = await fetchWithTimeout("/api/sync", { method: "GET" }, 35000);
+    const data = await readJson(r);
+
+    if (!data.ok) throw new Error(data.message || data.error || "Sync fallita.");
+
+    state.syncData = data;
+    state.matches = Array.isArray(data.matches) ? data.matches : [];
+    state.standings = Array.isArray(data.standings) ? data.standings : [];
+    state.understat = data.understat && typeof data.understat === "object" ? data.understat : {};
+    state.form = data.form && typeof data.form === "object" ? data.form : {};
+    state.h2h = data.h2h && typeof data.h2h === "object" ? data.h2h : {};
+
+    populateTeams();
+
+    const c = data.coverage || {};
+    const us = c.understatAvailable ? "· xG ✅" : "· xG ❌";
+    setStatus(
+      `OK · ${c.matches ?? 0} partite · ${c.teamsWithForm ?? 0} forma · ` +
+      `${c.h2hPairs ?? 0} H2H · ${c.understatTeams ?? 0} xG ${us}`,
+      "success"
+    );
+    hideResults();
+  } catch (e) {
+    console.error("SYNC ERROR:", e);
+    setStatus("Errore sincronizzazione", "error");
+    showError(`SYNC ERROR:\n${e?.message || e}`);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+/* ================= PREDICT ================= */
+function buildPredictionPayload() {
+  const homeTeam = $("homeTeam")?.value?.trim();
+  const awayTeam = $("awayTeam")?.value?.trim();
+  const match = findMatch(homeTeam, awayTeam);
+
+  const understatPayload = {};
+  const homeU = getUnderstatFor(homeTeam);
+  const awayU = getUnderstatFor(awayTeam);
+  if (homeU) understatPayload[normalizeTeamName(homeTeam)] = homeU;
+  if (awayU) understatPayload[normalizeTeamName(awayTeam)] = awayU;
+
+  return {
+    homeTeam,
+    awayTeam,
+    competition: "seriea",
+    match: match ? {
+      id: match.id,
+      home: extractTeamName(match, "home"),
+      away: extractTeamName(match, "away"),
+      kickoff_utc: match.kickoff_utc,
+      status: match.status,
+      score: match.score
+    } : null,
+    standings: state.standings,
+    form: state.form,
+    h2h: state.h2h,
+    understat: understatPayload
+  };
+}
+
+async function predict() {
+  hideError();
+  const homeTeam = $("homeTeam")?.value?.trim();
+  const awayTeam = $("awayTeam")?.value?.trim();
+
+  if (!homeTeam || !awayTeam) { showError("Seleziona entrambe le squadre."); return; }
+  if (normalizeTeamName(homeTeam) === normalizeTeamName(awayTeam)) {
+    showError("Le squadre devono essere diverse."); return;
+  }
+  if (!state.syncData) { showError("Prima sincronizza i dati."); return; }
+
+  const btn = $("predictButton");
+  if (btn) btn.disabled = true;
+  setStatus(`Calcolo: ${homeTeam} - ${awayTeam}...`, "loading");
+
+  try {
+    const payload = buildPredictionPayload();
+    const r = await fetchWithTimeout("/api/predict", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }, 25000);
+
+    const data = await readJson(r);
+    if (!data.ok) throw new Error(data.message || data.error || "Predict fallita.");
+
+    state.prediction = data;
+    renderPrediction(data);
+    showResults();
+    setStatus(`Previsione OK · ${homeTeam} vs ${awayTeam}`, "success");
+  } catch (e) {
+    console.error("PREDICT ERROR:", e);
+    setStatus("Errore calcolo", "error");
+    showError(`PREDICT ERROR:\n${e?.message || e}`);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+/* ================= RENDER ================= */
+function renderPrediction(data) {
+  const eg = data.expectedGoals || {};
+  const homeU = getUnderstatFor(data.homeTeam);
+  const awayU = getUnderstatFor(data.awayTeam);
+
+  setText("homeXG", formatXG(eg.home));
+  setText("awayXG", formatXG(eg.away));
+  $("homeXGsub").textContent = homeU
+    ? `xG stagione: ${homeU.xgForPerGame} fatti / ${homeU.xgAgainstPerGame} subiti (${homeU.played} partite)`
+    : "";
+  $("awayXGsub").textContent = awayU
+    ? `xG stagione: ${awayU.xgForPerGame} fatti / ${awayU.xgAgainstPerGame} subiti (${awayU.played} partite)`
+    : "";
+  setText("xgSource", data.xgSource || "—");
+
+  const p = data.probabilities || {};
+  setText("probHome", formatPercent(p.home));
+  setText("probDraw", formatPercent(p.draw));
+  setText("probAway", formatPercent(p.away));
+
+  const dc = data.doubleChance || {};
+  setText("double1X", formatPercent(dc["1X"]));
+  setText("doubleX2", formatPercent(dc["X2"]));
+  setText("double12", formatPercent(dc["12"]));
+
+  const ou = data.overUnder || {};
+  setText("over15", formatPercent(ou.over15));
+  setText("under15", formatPercent(ou.under15));
+  setText("over25", formatPercent(ou.over25));
+  setText("under25", formatPercent(ou.under25));
+  setText("over35", formatPercent(ou.over35));
+  setText("under35", formatPercent(ou.under35));
+
+  const btts = data.btts || {};
+  setText("bttsYes", formatPercent(btts.yes));
+  setText("bttsNo", formatPercent(btts.no));
+
+  const hc = data.handicap || {};
+  setText("handicapHomeMinus1", formatPercent(hc.homeMinus1));
+  setText("handicapHomePlus1", formatPercent(hc.homePlus1));
+  setText("handicapAwayPlus1", formatPercent(hc.awayPlus1));
+
+  renderExactScores(data.exactScores || []);
+
+  const fo = data.fairOdds || {};
+  setText("fairHome", formatOdds(fo.home));
+  setText("fairDraw", formatOdds(fo.draw));
+  setText("fairAway", formatOdds(fo.away));
+  setText("fairOver25", formatOdds(fo.over25));
+  setText("fairUnder25", formatOdds(fo.under25));
+  setText("fairBttsYes", formatOdds(fo.bttsYes));
+
+  const f = data.factorsUsed || {};
+  setFactor("factorUnderstat", f.understat);
+  setFactor("factorStandings", f.standings);
+  setFactor("factorForm", f.form);
+  setFactor("factorHomeAway", f.homeAway);
+  setFactor("factorH2H", f.h2h);
+
+  renderH2H(data);
+  setText("confidence", Number.isFinite(Number(data.confidence))
+    ? `${Number(data.confidence).toFixed(0)}%`
+    : "—");
+}
+
+function setFactor(id, used) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = used ? "✓ Utilizzato" : "— Non disponibile";
+  el.className = "factor-value " + (used ? "yes" : "no");
+}
+
+function renderExactScores(scores) {
+  const c = $("exactScores");
+  if (!c) return;
+  c.innerHTML = "";
+
+  if (!Array.isArray(scores) || scores.length === 0) {
+    c.innerHTML = '<div class="info">Nessun risultato esatto disponibile.</div>';
+    return;
+  }
+
+  for (const s of scores.slice(0, 10)) {
+    const card = document.createElement("div");
+    card.className = "score-card";
+    card.innerHTML = `<div class="score">${s.score || "—"}</div>
+                      <div class="prob">${formatPercent(s.probability)}</div>`;
+    c.appendChild(card);
+  }
+}
+
+function renderH2H(data) {
+  const el = $("h2hSummary");
+  if (!el) return;
+  const h2h = data.h2h;
+  if (!h2h || h2h.available !== true) {
+    el.textContent = "Nessun H2H recente (≤ 3 anni) disponibile.";
+    return;
+  }
+  el.innerHTML = `<strong>${h2h.matches}</strong> precedenti (ultimi 3 anni). ` +
+    `Media gol: <strong>${Number(h2h.averageHomeGoals).toFixed(2)}</strong> casa / ` +
+    `<strong>${Number(h2h.averageAwayGoals).toFixed(2)}</strong> ospite.`;
+}
+
+/* ================= BACKTEST ================= */
+async function runBacktest() {
+  const content = $("backtestContent");
+  const btn = $("backtestButton");
+  if (btn) btn.disabled = true;
+  if (content) content.textContent = "Caricamento...";
+
+  try {
+    const r = await fetchWithTimeout("/api/backtest", { method: "GET" }, 15000);
+    const data = await readJson(r);
+
+    if (!data.stats) {
+      if (content) content.textContent = data.message || "Nessun dato disponibile.";
+      return;
+    }
+
+    const s = data.stats;
+    const rows = [
+      `<div class="bt-row"><span>Previsioni salvate</span><strong>${s.totalPredictions}</strong></div>`,
+      `<div class="bt-row"><span>Partite concluse confrontate</span><strong>${s.totalMatched}</strong></div>`,
+      `<div class="bt-row"><span>Accuratezza 1X2 totale</span><strong>${s.accuracy1X2}% (${s.correct}/${s.totalMatched})</strong></div>`,
+      `<div class="bt-row"><span>Ultime ${s.recent20.sample}</span><strong>${s.recent20.accuracy}%</strong></div>`,
+      `<div class="bt-row"><span>MAE gol totali</span><strong>${s.maeTotalGoals}</strong></div>`,
+      `<div class="bt-row"><span>Brier score (più basso = meglio)</span><strong>${s.brierScore}</strong></div>`
+    ];
+    if (content) content.innerHTML = rows.join("");
+  } catch (e) {
+   
