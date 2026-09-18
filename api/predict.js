@@ -675,25 +675,27 @@ export default async function handler(req, res) {
         dixonColesRho: config.dixonColesRho
       },
       xgSource: expected.source,
-expectedGoals: {
-  home: Number(expected.home.toFixed(2)),
-  away: Number(expected.away.toFixed(2))
-},
 dataQuality: {
-  homeTeam: {
-    matches: body.understat?.[normalizeTeamName(homeTeam)]?.matchesWithXg ?? 0,
-    xgForPerGame: body.understat?.[normalizeTeamName(homeTeam)]?.xgForPerGame ?? null,
-    xgAgainstPerGame: body.understat?.[normalizeTeamName(homeTeam)]?.xgAgainstPerGame ?? null,
-    played: body.understat?.[normalizeTeamName(homeTeam)]?.played ?? 0
-  },
-  awayTeam: {
-    matches: body.understat?.[normalizeTeamName(awayTeam)]?.matchesWithXg ?? 0,
-    xgForPerGame: body.understat?.[normalizeTeamName(awayTeam)]?.xgForPerGame ?? null,
-    xgAgainstPerGame: body.understat?.[normalizeTeamName(awayTeam)]?.xgAgainstPerGame ?? null,
-    played: body.understat?.[normalizeTeamName(awayTeam)]?.played ?? 0
-  }
+  homeTeam: (() => {
+    const d = body.understat?.[normalizeTeamName(homeTeam)];
+    return {
+      matches: d?.matchesWithXg ?? 0,
+      played: d?.played ?? 0,
+      xgForPerGame: d?.xgForPerGame ?? null,
+      xgAgainstPerGame: d?.xgAgainstPerGame ?? null
+    };
+  })(),
+  awayTeam: (() => {
+    const d = body.understat?.[normalizeTeamName(awayTeam)];
+    return {
+      matches: d?.matchesWithXg ?? 0,
+      played: d?.played ?? 0,
+      xgForPerGame: d?.xgForPerGame ?? null,
+      xgAgainstPerGame: d?.xgAgainstPerGame ?? null
+    };
+  })()
 },
-      factorsUsed: expected.factors,
+factorsUsed: expected.factors,
       h2h: expected.h2h,
       probabilities,
       doubleChance,
