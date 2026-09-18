@@ -1,0 +1,12 @@
+{
+  "name": "serie-a-predictor-v7",
+  "version": "1.0.0",
+  "description": "Serie A predictor V7 — BBS + Understat + API-Football",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}
