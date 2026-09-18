@@ -218,45 +218,28 @@ function lambdaFromUnderstat(homeU, awayU) {
   const awayXgFor = shrink(awayU.xgForPerGame, awayPlayed);
   const awayXgAgainst = shrink(awayU.xgAgainstPerGame ?? LEAGUE_AVG_XG, awayPlayed);
 
-  // DEBUG TEMPORANEO
-  console.log("UNDERSTAT DEBUG", {
-    homePlayed, awayPlayed, K,
-    homeRaw: homeU.xgForPerGame,
-    homeShrunk: homeXgFor,
-    awayRaw: awayU.xgForPerGame,
-    awayShrunk: awayXgFor,
-    homeAgainst: homeXgAgainst,
-    awayAgainst: awayXgAgainst
-  });
-
   const homeAttack = homeXgFor / LEAGUE_AVG_XG;
   const awayDefense = awayXgAgainst / LEAGUE_AVG_XG;
   const awayAttack = awayXgFor / LEAGUE_AVG_XG;
   const homeDefense = homeXgAgainst / LEAGUE_AVG_XG;
 
-   const lambdaHome = LEAGUE_HOME_XG * homeAttack * awayDefense;
+  const lambdaHome = LEAGUE_HOME_XG * homeAttack * awayDefense;
   const lambdaAway = LEAGUE_AWAY_XG * awayAttack * homeDefense;
 
   console.log("UNDERSTAT_DEBUG", JSON.stringify({
     homePlayed,
     awayPlayed,
-    K,
     homeRaw: homeU.xgForPerGame,
     homeShrunk: homeXgFor,
-    homeAgainstShrunk: homeXgAgainst,
     awayRaw: awayU.xgForPerGame,
     awayShrunk: awayXgFor,
-    awayAgainstShrunk: awayXgAgainst,
-    homeAttack, awayDefense,
-    awayAttack, homeDefense,
-    lambdaHome, lambdaAway
+    lambdaHome,
+    lambdaAway
   }));
 
   return {
     home: lambdaHome,
     away: lambdaAway
-  };
-}
   };
 }
 function lambdaFromForm(homeForm, awayForm) {
